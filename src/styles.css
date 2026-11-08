@@ -1936,3 +1936,6 @@ ul.smart-list li:hover .smart-edit { opacity: 1; }
   .smart-rule { grid-template-columns: 1fr 1fr; }
   .smart-rule input { grid-column: 1 / -1; }
 }
+
+.affinity-column { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px; }
+.affinity-column .suggest-row { margin: 0; }

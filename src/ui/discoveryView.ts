@@ -63,6 +63,8 @@ export class DiscoveryView {
       return;
     }
     this.el.appendChild(this.hero());
+    const affinity = this.affinitySection();
+    if (affinity) this.el.appendChild(affinity);
     const mixes = dailyMixes(state.tracks);
     if (mixes.length > 0) this.el.appendChild(this.mixesSection(mixes));
     this.el.appendChild(this.deckSection());
@@ -121,6 +123,28 @@ export class DiscoveryView {
     return section;
   }
 
+  private affinitySection(): HTMLElement | null {
+    const seed =
+      [...this.state.tracks]
+        .filter((track) => track.hasAudio)
+        .sort((a, b) => Number(b.favorite) - Number(a.favorite) || (b.playCount ?? 0) - (a.playCount ?? 0))[0] ?? null;
+    if (!seed) return null;
+    const suggestions = nextSuggestions(seed, this.state.tracks, new Set([seed.id]), this.dismissed, 6);
+    if (suggestions.length === 0) return null;
+    const section = h('section', { className: 'home-section' });
+    section.appendChild(
+      sectionHeader(`Afines a ${seed.artist} — ${seed.title}`, {
+        label: 'Por BPM · tonalidad Camelot · género · energía',
+      }),
+    );
+    const grid = h('div', { className: 'suggest-grid' });
+    const column = h('div', { className: 'suggest-column affinity-column' });
+    for (const suggestion of suggestions) column.appendChild(this.suggestionRow(suggestion, null, 'similar'));
+    grid.appendChild(column);
+    section.appendChild(grid);
+    return section;
+  }
+
   private deckSection(): HTMLElement {
     const section = h('section', { className: 'home-section' });
     section.appendChild(sectionHeader('Siguiente para cada deck', { label: 'Sugerencias armónicas' }));
@@ -153,7 +177,7 @@ export class DiscoveryView {
     return section;
   }
 
-  private suggestionRow(suggestion: Suggestion, deckId: DeckId, kind: RecommendationEvent['kind']): HTMLElement {
+  private suggestionRow(suggestion: Suggestion, deckId: DeckId | null, kind: RecommendationEvent['kind']): HTMLElement {
     const track = suggestion.track;
     const row = h('div', { className: 'suggest-row' });
     row.appendChild(artwork(track.artwork, track.title, 'suggest-art'));
@@ -170,25 +194,30 @@ export class DiscoveryView {
     row.appendChild(info);
     const actions = h('div', { className: 'suggest-actions' });
     const play = h('button', { className: 'btn btn-mini', text: '▶', attrs: { type: 'button', title: 'Reproducir y aceptar' } });
+    const seedId = deckId ? this.state.loaded[deckId]?.id : undefined;
     play.addEventListener('click', () => {
-      this.cb.onRecommendation({ trackId: track.id, seedId: this.state.loaded[deckId]?.id, kind, action: 'accepted' });
+      this.cb.onRecommendation({ trackId: track.id, seedId, kind, action: 'accepted' });
       this.dismissed.delete(track.id);
       this.cb.onPlay(track.id);
-    });
-    const load = h('button', { className: 'btn btn-mini', text: `→ ${deckId}`, attrs: { type: 'button', title: `Cargar en Deck ${deckId}` } });
-    load.addEventListener('click', () => {
-      this.cb.onRecommendation({ trackId: track.id, seedId: this.state.loaded[deckId]?.id, kind, action: 'accepted' });
-      this.dismissed.delete(track.id);
-      this.cb.onLoadToDeck(track.id, deckId);
     });
     const dismiss = h('button', { className: 'btn btn-mini icon-btn', attrs: { type: 'button', title: 'Descartar', 'aria-label': `Descartar ${track.title}` } });
     dismiss.innerHTML = icon('close', 13);
     dismiss.addEventListener('click', () => {
-      this.cb.onRecommendation({ trackId: track.id, seedId: this.state.loaded[deckId]?.id, kind, action: 'dismissed' });
+      this.cb.onRecommendation({ trackId: track.id, seedId, kind, action: 'dismissed' });
       this.dismissed.add(track.id);
       row.remove();
     });
-    actions.append(play, load, dismiss);
+    if (deckId) {
+      const load = h('button', { className: 'btn btn-mini', text: `→ ${deckId}`, attrs: { type: 'button', title: `Cargar en Deck ${deckId}` } });
+      load.addEventListener('click', () => {
+        this.cb.onRecommendation({ trackId: track.id, seedId, kind, action: 'accepted' });
+        this.dismissed.delete(track.id);
+        this.cb.onLoadToDeck(track.id, deckId);
+      });
+      actions.append(play, load, dismiss);
+    } else {
+      actions.append(play, dismiss);
+    }
     row.appendChild(actions);
     return row;
   }
