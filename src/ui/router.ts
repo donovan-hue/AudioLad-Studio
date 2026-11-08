@@ -14,6 +14,7 @@ export type ToolId =
 
 export type Route =
   | { name: 'home' }
+  | { name: 'discover' }
   | { name: 'search' }
   | { name: 'library' }
   | { name: 'playlist'; id: string }
@@ -41,6 +42,8 @@ export function parseRoute(hash: string): Route {
   if (parts.length === 0) return { name: 'home' };
   const [head, ...rest] = parts;
   switch (head) {
+    case 'discover':
+      return { name: 'discover' };
     case 'search':
       return { name: 'search' };
     case 'library':
@@ -69,6 +72,8 @@ export function routeToHash(route: Route): string {
   switch (route.name) {
     case 'home':
       return '#/';
+    case 'discover':
+      return '#/discover';
     case 'search':
       return '#/search';
     case 'library':

@@ -1854,3 +1854,85 @@ table.tracks tbody tr.virtual-spacer { pointer-events: none; }
 .btn-danger { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); }
 .btn-danger:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); }
 .btn-export-bundle, .btn-import-bundle, .btn-trash { flex: 0 0 auto; }
+
+/* ---------- Descubrir ---------- */
+.section-note { color: var(--muted); font-size: 0.72rem; }
+.discovery-view { display: flex; flex-direction: column; gap: 8px; }
+.discovery-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 18px 20px 12px; border-bottom: 1px solid var(--border); }
+.discovery-hero-copy { display: grid; gap: 6px; max-width: 720px; }
+.discovery-local-badge { display: inline-flex; align-items: center; gap: 5px; width: fit-content; margin-top: 4px; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--accent-a) 12%, transparent); color: var(--accent-a); font-size: 0.7rem; font-weight: 800; }
+.discovery-local-badge svg { width: 13px; height: 13px; }
+.mix-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; padding: 4px 0; }
+.mix-card { display: flex; flex-direction: column; gap: 7px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.mix-card:hover { border-color: color-mix(in srgb, var(--accent-a) 40%, var(--border)); }
+.mix-art { position: relative; display: block; width: 100%; padding: 0; border: 0; aspect-ratio: 1; border-radius: 9px; overflow: hidden; cursor: pointer; background: #000; }
+.mix-art .artwork, .mix-art img { width: 100%; height: 100%; }
+.mix-play { position: absolute; right: 8px; bottom: 8px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-a); color: var(--ink); box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
+.mix-play svg { width: 16px; height: 16px; }
+.mix-name { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mix-desc { color: var(--muted); font-size: 0.7rem; line-height: 1.35; min-height: 2.7em; }
+.suggest-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.suggest-column { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.suggest-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.deck-pill { padding: 2px 8px; border-radius: 999px; font-size: 0.66rem; font-weight: 900; letter-spacing: 0.04em; }
+.deck-pill-a { background: color-mix(in srgb, var(--accent-a) 18%, transparent); color: var(--accent-a); }
+.deck-pill-b { background: color-mix(in srgb, var(--accent-b) 20%, transparent); color: var(--accent-b); }
+.suggest-seed { color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px; border-radius: 9px; background: var(--panel-2); }
+.suggest-row:hover { background: color-mix(in srgb, var(--accent-a) 6%, var(--panel-2)); }
+.suggest-art { width: 40px; height: 40px; border-radius: 6px; overflow: hidden; }
+.suggest-art .artwork, .suggest-art img { width: 100%; height: 100%; object-fit: cover; }
+.suggest-info { display: grid; gap: 1px; min-width: 0; }
+.suggest-info strong { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-info small { color: var(--muted); font-size: 0.68rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest-reasons { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 2px; }
+.reason-chip { padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-size: 0.62rem; white-space: nowrap; }
+.reason-chip.harmonic { border-color: color-mix(in srgb, var(--accent-a) 45%, var(--border)); color: var(--accent-a); }
+.suggest-actions { display: flex; gap: 3px; }
+.radio-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.radio-seed { flex: 1 1 260px; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font: inherit; }
+.mood-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.discovery-track-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 7px; }
+.discovery-track { display: grid; grid-template-columns: 42px minmax(0,1fr) auto auto; gap: 7px; align-items: center; padding: 7px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.discovery-art { width: 42px; height: 42px; border-radius: 6px; overflow: hidden; }
+.discovery-art .artwork, .discovery-art img { width: 100%; height: 100%; object-fit: cover; }
+.discovery-track-info { display: grid; gap: 1px; min-width: 0; }
+.discovery-track-info strong { font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.discovery-track-info small { color: var(--muted); font-size: 0.68rem; }
+.discovery-track-meta { display: flex; flex-wrap: wrap; gap: 3px; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 7px; }
+.stat-card { display: grid; gap: 2px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+.stat-card strong { font-size: 1.2rem; color: var(--accent-a); }
+.stat-card span { color: var(--muted); font-size: 0.68rem; }
+.top-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
+.top-list h4 { margin: 0 0 5px; font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.top-list ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.top-list li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); font-size: 0.75rem; }
+.top-list li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-list li b { color: var(--accent-a); }
+.wrapped-modal .modal-panel { background: radial-gradient(circle at 20% 0%, color-mix(in srgb, var(--accent-a) 16%, #000), #000 60%); }
+.wrapped-hero { display: grid; gap: 4px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent-a) 9%, transparent); margin-bottom: 12px; }
+.wrapped-minutes { font-size: 2.1rem; color: var(--accent-a); line-height: 1; }
+.rec-history { display: grid; gap: 4px; }
+.rec-row { display: flex; gap: 9px; align-items: center; padding: 6px 8px; border-radius: 8px; background: var(--panel); }
+.rec-action { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 0.72rem; font-weight: 900; }
+.rec-accepted { background: color-mix(in srgb, var(--accent-a) 18%, transparent); color: var(--accent-a); }
+.rec-dismissed { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
+.rec-copy { display: grid; gap: 1px; min-width: 0; }
+.rec-copy strong { font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rec-copy small { color: var(--muted); font-size: 0.65rem; }
+
+/* ---------- Editor de playlists inteligentes ---------- */
+.smart-editor-modal .modal-panel { max-width: 720px; }
+.smart-rules { display: grid; gap: 6px; margin: 6px 0; }
+.smart-rule { display: grid; grid-template-columns: minmax(110px, 1fr) 84px minmax(110px, 1.4fr) auto; gap: 5px; align-items: center; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.smart-rule select, .smart-rule input { min-width: 0; }
+.modal-hint.error { color: var(--danger); }
+ul.smart-list li { display: flex; align-items: center; gap: 4px; }
+ul.smart-list li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.smart-edit { opacity: 0.7; padding: 1px 5px; }
+ul.smart-list li:hover .smart-edit { opacity: 1; }
+@media (max-width: 560px) {
+  .smart-rule { grid-template-columns: 1fr 1fr; }
+  .smart-rule input { grid-column: 1 / -1; }
+}

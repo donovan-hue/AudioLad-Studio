@@ -261,6 +261,14 @@ export class Library {
     await this.persist();
   }
 
+  /** Crea o actualiza una playlist inteligente por id (editor de reglas). */
+  async saveSmartPlaylist(playlist: SmartPlaylist): Promise<void> {
+    const index = this.data.smartPlaylists.findIndex((item) => item.id === playlist.id);
+    if (index >= 0) this.data.smartPlaylists = this.data.smartPlaylists.map((item, position) => (position === index ? playlist : item));
+    else this.data.smartPlaylists = [...this.data.smartPlaylists, playlist];
+    await this.persist();
+  }
+
   async removeSmartPlaylist(id: string): Promise<void> {
     this.data.smartPlaylists = this.data.smartPlaylists.filter((p) => p.id !== id);
     await this.persist();

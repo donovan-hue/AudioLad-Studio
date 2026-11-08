@@ -60,11 +60,13 @@ export function actionButton(
 
 export function sectionHeader(
   title: string,
-  action?: { label: string; onClick: () => void },
+  action?: { label: string; onClick?: () => void },
 ): HTMLElement {
   const header = h('div', { className: 'section-head' });
   header.appendChild(h('h2', { className: 'section-title', text: title }));
-  if (action) {
+  if (action && !action.onClick) {
+    header.appendChild(h('span', { className: 'section-note', text: action.label }));
+  } else if (action?.onClick) {
     const button = h('button', { className: 'btn btn-ghost btn-mini', text: action.label });
     button.type = 'button';
     button.addEventListener('click', action.onClick);

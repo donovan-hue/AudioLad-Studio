@@ -338,6 +338,7 @@ export class LibraryView {
             <select class="smart-op" aria-label="Operador"></select>
             <input class="smart-value" type="text" placeholder="valor">
             <button class="btn btn-mini smart-create-btn" title="Crear playlist inteligente" aria-label="Crear playlist inteligente">${icon('sparkles', 15)}</button>
+            <button class="btn btn-mini smart-editor-open" title="Editor de reglas múltiples" aria-label="Abrir editor de reglas">${icon('sliders', 15)}</button>
           </div>
           <ul class="smart-list"></ul>
         </aside>
@@ -497,6 +498,7 @@ export class LibraryView {
     };
     this.smartField.addEventListener('change', refreshOps);
     refreshOps();
+    (this.el.querySelector('.smart-editor-open') as HTMLButtonElement).addEventListener('click', () => this.openSmartEditor());
     (this.el.querySelector('.smart-create-btn') as HTMLButtonElement).addEventListener('click', () => {
       const name = (this.el.querySelector('.smart-name') as HTMLInputElement).value.trim();
       const value = (this.el.querySelector('.smart-value') as HTMLInputElement).value.trim();
@@ -1298,6 +1300,118 @@ export class LibraryView {
     });
   }
 
+  /** Editor de playlists inteligentes: varias reglas, AND/OR y edición. */
+  private openSmartEditor(existing?: SmartPlaylist): void {
+    const modal = openModal({ title: existing ? `Editar · ${existing.name}` : 'Nueva playlist inteligente', className: 'smart-editor-modal' });
+    const nameRow = h('label', { className: 'meta-row' });
+    nameRow.appendChild(h('span', { text: 'Nombre' }));
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.maxLength = 60;
+    nameInput.value = existing?.name ?? '';
+    nameInput.placeholder = 'Sesión de club';
+    nameRow.appendChild(nameInput);
+    modal.body.appendChild(nameRow);
+
+    const matchRow = h('label', { className: 'meta-row' });
+    matchRow.appendChild(h('span', { text: 'Combinar' }));
+    const matchSelect = document.createElement('select');
+    for (const [value, label] of [['all', 'Todas las reglas (Y)'], ['any', 'Cualquier regla (O)']] as const) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      matchSelect.appendChild(option);
+    }
+    matchSelect.value = existing?.match ?? 'all';
+    matchRow.appendChild(matchSelect);
+    modal.body.appendChild(matchRow);
+
+    const rulesBox = h('div', { className: 'smart-rules' });
+    modal.body.appendChild(rulesBox);
+    const hint = h('p', { className: 'modal-hint', text: 'Sólo se guardan reglas con valor. Se evalúan al vuelo contra la biblioteca.' });
+    modal.body.appendChild(hint);
+
+    interface RuleRow {
+      row: HTMLElement;
+      field: HTMLSelectElement;
+      op: HTMLSelectElement;
+      value: HTMLInputElement;
+    }
+    const rows: RuleRow[] = [];
+    const addRule = (initial?: Partial<SmartPlaylist['rules'][number]>): void => {
+      const row = h('div', { className: 'smart-rule' });
+      const field = document.createElement('select');
+      field.setAttribute('aria-label', 'Campo');
+      for (const item of SMART_FIELDS) {
+        const option = document.createElement('option');
+        option.value = item;
+        option.textContent = FIELD_LABELS[item];
+        field.appendChild(option);
+      }
+      field.value = initial?.field ?? 'bpm';
+      const op = document.createElement('select');
+      op.setAttribute('aria-label', 'Operador');
+      const refreshOps = (): void => {
+        const previous = op.value || initial?.op;
+        op.textContent = '';
+        for (const candidate of opsForField(field.value as SmartField)) {
+          const option = document.createElement('option');
+          option.value = candidate;
+          option.textContent = { contains: 'contiene', equals: '=', gte: '≥', lte: '≤' }[candidate];
+          op.appendChild(option);
+        }
+        if (previous && [...op.options].some((option) => option.value === previous)) op.value = previous;
+      };
+      refreshOps();
+      field.addEventListener('change', refreshOps);
+      const value = document.createElement('input');
+      value.type = 'text';
+      value.placeholder = 'valor';
+      value.value = initial?.value ?? '';
+      value.setAttribute('aria-label', 'Valor de la regla');
+      const remove = button('btn btn-mini', '✕', 'Quitar regla');
+      remove.addEventListener('click', () => {
+        row.remove();
+        const index = rows.findIndex((entry) => entry.row === row);
+        if (index >= 0) rows.splice(index, 1);
+      });
+      row.append(field, op, value, remove);
+      rulesBox.appendChild(row);
+      rows.push({ row, field, op, value });
+    };
+    if (existing) for (const rule of existing.rules) addRule(rule);
+    else addRule();
+    const add = button('btn btn-ghost btn-mini', '＋ Añadir regla');
+    add.addEventListener('click', () => addRule());
+    modal.body.appendChild(add);
+
+    const actions = h('div', { className: 'modal-actions' });
+    const save = button('btn btn-primary btn-mini', 'Guardar', 'Guardar playlist inteligente');
+    save.addEventListener('click', () => {
+      const name = nameInput.value.trim();
+      const rules = rows
+        .map((entry) => ({ field: entry.field.value as SmartField, op: entry.op.value as SmartOp, value: entry.value.value.trim() }))
+        .filter((rule) => rule.value.length > 0);
+      if (name.length === 0 || rules.length === 0) {
+        hint.textContent = 'Pon un nombre y al menos una regla con valor.';
+        hint.classList.add('error');
+        return;
+      }
+      this.cb.onCreateSmart({
+        id: existing?.id ?? `s_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        match: matchSelect.value === 'any' ? 'any' : 'all',
+        rules,
+      });
+      modal.close();
+    });
+    const cancel = button('btn btn-mini', 'Cancelar');
+    cancel.addEventListener('click', () => modal.close());
+    actions.append(save, cancel);
+    modal.body.appendChild(actions);
+    nameInput.focus();
+  }
+
   private renderSmart(): void {
     this.smartList.textContent = '';
     for (const smart of this.smartPlaylists) {
@@ -1311,7 +1425,12 @@ export class LibraryView {
         this.renderPlaylists();
         this.renderSmart();
       });
-      li.appendChild(label);
+      const edit = button('btn btn-mini smart-edit', '✎', `Editar reglas de ${smart.name}`);
+      edit.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.openSmartEditor(smart);
+      });
+      li.append(label, edit);
       this.smartList.appendChild(li);
     }
   }

@@ -21,6 +21,7 @@ export interface ShellElements {
   themeButton: HTMLButtonElement;
   pages: {
     home: HTMLElement;
+    discover: HTMLElement;
     search: HTMLElement;
     library: HTMLElement;
     collection: HTMLElement;
@@ -39,6 +40,7 @@ export interface ShellElements {
 
 const NAV: { icon: IconName; label: string; route: Route }[] = [
   { icon: 'home', label: 'Inicio', route: { name: 'home' } },
+  { icon: 'sparkles', label: 'Descubrir', route: { name: 'discover' } },
   { icon: 'search', label: 'Buscar', route: { name: 'search' } },
   { icon: 'library', label: 'Tu biblioteca', route: { name: 'library' } },
   { icon: 'deck', label: 'Cabina DJ', route: { name: 'cabina' } },
@@ -172,6 +174,7 @@ export class Shell {
     };
     const pages = {
       home: makePage('home'),
+      discover: makePage('discover'),
       search: makePage('search'),
       library: makePage('library'),
       collection: makePage('collection'),
@@ -288,7 +291,14 @@ export class Shell {
     };
     const searchActive = route.name === 'search' || route.name === 'album' || route.name === 'artist';
     const libraryActive = route.name === 'library' || route.name === 'playlist';
-    const states = [route.name === 'home', searchActive, libraryActive, route.name === 'cabina', route.name === 'queue'];
+    const states = [
+      route.name === 'home',
+      route.name === 'discover',
+      searchActive,
+      libraryActive,
+      route.name === 'cabina',
+      route.name === 'queue',
+    ];
     this.sideNavButtons.forEach((button, index) => active(button, states[index] === true));
     this.sideToolButtons.forEach((button, index) => active(button, route.name === 'tool' && TOOLS[index]?.id === route.id));
     this.favoritesButton.classList.remove('active');

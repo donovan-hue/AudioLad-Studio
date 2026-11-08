@@ -68,7 +68,7 @@ npm install
 npm run dev        # cabina en http://localhost:5173
 npm run typecheck  # tsc --noEmit (estricto)
 npm run lint       # eslint
-npm run test       # vitest — 111 pruebas
+npm run test       # vitest — 123 pruebas
 npm run build      # typecheck + bundle en dist/
 npm run start      # producción: dist/ + /api/convert (PORT, default 8080)
 ```
@@ -93,8 +93,11 @@ src/
                   hot cues, historial, papelera y grabaciones (persistido)
     zip.ts        ZIP propio (store, sin dependencias)   bundle.ts  Exportar/importar biblioteca + audio
     smart.ts      Playlists inteligentes evaluadas al vuelo
+    discovery.ts  Similitud, Camelot, energía/ánimo, mezclas diarias, radio, stats y Wrapped
+    recommendations.ts  Historial local de recomendaciones aceptadas/descartadas
   audio/fingerprint.ts  Huella de 256 bits para duplicados difusos
   ui/lyrics.ts   Letras LRC con seguimiento sincronizado
+  ui/discoveryView.ts  Descubrir: mezclas, radio, sugerencias por deck, ánimo, stats y Wrapped
   ui/pwa.ts      Service worker, instalación y wake lock
   ui/             Cabina: decks, mixer, waveform (zoom/grid/hot cues), biblioteca, cola, sampler,
                   grabadora, historial, convertidor, tema claro/oscuro
@@ -110,7 +113,7 @@ src/
     components.ts Sistema de componentes (botones, tarjetas, modales)
     icons.ts      Set de iconos SVG propio
   server/ (server/) POST /api/convert real + servidor de producción
-tests/            111 pruebas vitest en 16 archivos (puros, ZIP/bundle, letras, huella y DOM)
+tests/            123 pruebas vitest en 17 archivos (puros, ZIP/bundle, letras, huella, descubrimiento y DOM)
 ```
 
 CI: `.github/workflows/ci.yml` — `npm ci → typecheck → lint → test → build` en cada push/PR (Node 22). La suite incluye pruebas puras y una prueba de integración DOM (`jsdom`) que arranca la shell, navega entre páginas, abre la paleta, la cola, las notificaciones y el editor de atajos.

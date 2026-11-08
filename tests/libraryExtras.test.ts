@@ -177,3 +177,21 @@ describe('papelera (deshacer)', () => {
     await expect(store.getBytes(track.id)).resolves.toEqual(new Uint8Array([7, 8, 9]));
   });
 });
+
+describe('playlists inteligentes editables', () => {
+  it('crea, actualiza por id y persiste las reglas', async () => {
+    const store = new MemoryStore();
+    const l = new Library(store);
+    await l.init();
+    const spec = { id: 's_test', name: 'Noche', match: 'all' as const, rules: [{ field: 'bpm' as const, op: 'gte' as const, value: '124' }] };
+    await l.saveSmartPlaylist(spec);
+    expect(l.smartPlaylists).toHaveLength(1);
+    await l.saveSmartPlaylist({ ...spec, name: 'Noche larga', match: 'any', rules: [...spec.rules, { field: 'genre' as const, op: 'equals' as const, value: 'House' }] });
+    expect(l.smartPlaylists).toHaveLength(1);
+    expect(l.smartPlaylists[0]?.name).toBe('Noche larga');
+    expect(l.smartPlaylists[0]?.match).toBe('any');
+    const reloaded = new Library(store);
+    await reloaded.init();
+    expect(reloaded.smartPlaylists[0]?.rules).toHaveLength(2);
+  });
+});

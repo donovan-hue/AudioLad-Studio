@@ -71,18 +71,18 @@
 
 ## 4. Descubrimiento · P1
 
-- [ ] Recomendaciones por similitud (BPM · tonalidad · género)
-- [ ] Mezclas diarias automáticas
-- [ ] Radio infinita desde una pista
-- [ ] Sugerencia de mezcla armónica (Camelot)
-- [ ] Recomendación de la siguiente pista para cada deck
-- [ ] «Descubrir» con novedades de la biblioteca
-- [ ] Estadísticas de escucha
-- [ ] Resumen anual tipo «Wrapped»
-- [ ] Filtros por energía / estado de ánimo
-- [ ] Recomendaciones 100 % locales (sin nube)
-- [ ] Editor de playlists inteligentes (múltiples reglas y edición)
-- [ ] Historial de recomendaciones aceptadas/descartadas
+- [x] Recomendaciones por similitud (BPM · tonalidad · género)
+- [x] Mezclas diarias automáticas
+- [x] Radio infinita desde una pista
+- [x] Sugerencia de mezcla armónica (Camelot)
+- [x] Recomendación de la siguiente pista para cada deck
+- [x] «Descubrir» con novedades de la biblioteca
+- [x] Estadísticas de escucha
+- [x] Resumen anual tipo «Wrapped»
+- [x] Filtros por energía / estado de ánimo
+- [x] Recomendaciones 100 % locales (sin nube)
+- [x] Editor de playlists inteligentes (múltiples reglas y edición)
+- [x] Historial de recomendaciones aceptadas/descartadas
 
 ## 5. Social y cuentas · P1
 

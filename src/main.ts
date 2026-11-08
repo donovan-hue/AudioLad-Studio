@@ -42,6 +42,9 @@ import { openEqPanel } from './ui/eqPanel.js';
 import { SleepTimer } from './audio/sleepTimer.js';
 import { PwaController, WakeLockKeeper } from './ui/pwa.js';
 import { openLyricsPanel } from './ui/lyrics.js';
+import { DiscoveryView } from './ui/discoveryView.js';
+import { radioFrom } from './library/discovery.js';
+import { loadRecommendationHistory, recordRecommendation, type RecommendationEvent } from './library/recommendations.js';
 import { sha256Hex } from './util/hash.js';
 import { computeQuality, type QualityInfo } from './util/quality.js';
 import { integratedLoudness, normalizationGainDb } from './audio/loudness.js';
@@ -133,6 +136,8 @@ async function main(): Promise<void> {
   let sleepRemainingSec: number | null = null;
   const shuffleHistory: string[] = [];
   let consumedQueue: string[] = [];
+  let recommendationHistory: RecommendationEvent[] = loadRecommendationHistory();
+  let radioSeedId: string | null = null;
   const playHistory: string[] = [];
   let lastSessionPersist = 0;
   let lastMediaUpdate = 0;
@@ -1568,7 +1573,7 @@ async function main(): Promise<void> {
           toast(`JSON inválido: ${error instanceof Error ? error.message : String(error)}`, 'error');
         });
     },
-    onCreateSmart: (spec: SmartPlaylist) => void library.addSmartPlaylist(spec).then(refreshAll),
+    onCreateSmart: (spec: SmartPlaylist) => void library.saveSmartPlaylist(spec).then(refreshAll),
     onDeleteSmart: (id) => void library.removeSmartPlaylist(id).then(refreshAll),
   });
   libraryView.el.addEventListener('libtoast', (event) => {
@@ -1801,6 +1806,69 @@ async function main(): Promise<void> {
   });
 
   // ---------- Vistas de la shell ----------
+  async function playMix(trackIds: string[], name: string): Promise<void> {
+    radioSeedId = null;
+    const playable = trackIds.filter((id) => library.getTrack(id)?.hasAudio);
+    if (playable.length === 0) {
+      toast('Esa mezcla no tiene pistas reproducibles.', 'info');
+      return;
+    }
+    await library.clearQueue();
+    await library.enqueueMany(playable);
+    await playTrack(playable[0]!);
+    toast(`Reproduciendo «${name}» (${playable.length} pistas).`, 'ok');
+    refreshAll();
+  }
+
+  async function replenishRadio(): Promise<void> {
+    if (!radioSeedId || library.queue.length >= 5) return;
+    const seed = library.getTrack(radioSeedId);
+    if (!seed) {
+      radioSeedId = null;
+      return;
+    }
+    const exclude = new Set<string>([...library.queue, ...consumedQueue, state.loadedTrackId.A, state.loadedTrackId.B].filter((id): id is string => !!id));
+    const next = radioFrom(seed, library.tracks, 60)
+      .filter((track) => !exclude.has(track.id))
+      .slice(0, 12);
+    if (next.length === 0) return;
+    await library.enqueueMany(next.map((track) => track.id));
+    refreshAll();
+  }
+
+  window.setInterval(() => void replenishRadio(), 12_000);
+
+  async function startRadio(seedId: string): Promise<void> {
+    const seed = library.getTrack(seedId);
+    if (!seed) {
+      toast('Elige una pista válida para la radio.', 'info');
+      return;
+    }
+    const queue = radioFrom(seed, library.tracks, 30);
+    if (queue.length <= 1) {
+      toast('Necesitas más pistas con audio para encadenar una radio.', 'info');
+      return;
+    }
+    await playMix(queue.map((track) => track.id), `Radio · ${seed.title}`);
+    radioSeedId = seed.id;
+  }
+
+  const discoveryView = new DiscoveryView({
+    onPlay: (trackId) => void playTrack(trackId),
+    onEnqueue: (trackId) =>
+      void library.enqueue(trackId).then((added) => {
+        if (!added) toast('Esa pista ya está en la cola.', 'info');
+        refreshAll();
+      }),
+    onLoadToDeck: (trackId, deckId) => void loadTrackToDeck(trackId, deckId),
+    onPlayMix: (trackIds, name) => void playMix(trackIds, name),
+    onStartRadio: (seedId) => void startRadio(seedId),
+    onRecommendation: (event) => {
+      recommendationHistory = recordRecommendation(recommendationHistory, event);
+      toast(event.action === 'accepted' ? 'Recomendación aceptada.' : 'Recomendación descartada.', event.action === 'accepted' ? 'ok' : 'info');
+    },
+  });
+
   const homeView = new HomeView({
     onPlayTrack: (trackId) => void playTrack(trackId),
     onPreview: (trackId) => void togglePreview(trackId),
@@ -1852,6 +1920,7 @@ async function main(): Promise<void> {
 
   shell.el.queueBody.appendChild(queueView.el);
   shell.el.pages.home.appendChild(homeView.el);
+  shell.el.pages.discover.appendChild(discoveryView.el);
   shell.el.pages.search.appendChild(searchView.el);
   shell.el.pages.library.appendChild(libraryView.el);
   shell.el.pages.collection.appendChild(collectionView.el);
@@ -1903,6 +1972,9 @@ async function main(): Promise<void> {
       case 'home':
         shell.showPage('home');
         break;
+      case 'discover':
+        shell.showPage('discover');
+        break;
       case 'search':
         shell.showPage('search');
         window.setTimeout(() => searchView.focus(), 0);
@@ -1944,6 +2016,7 @@ async function main(): Promise<void> {
     document.body.dataset.route = route.name;
     const labels: Record<Route['name'], string> = {
       home: 'Inicio',
+      discover: 'Descubrir',
       search: 'Buscar',
       library: 'Tu biblioteca',
       playlist: 'Playlist',
@@ -2009,6 +2082,12 @@ async function main(): Promise<void> {
     historyView.render(library.historyEvents, library.tracks, library.recordings);
     recorderView.renderRecordings(library.recordings);
     homeView.render(library.tracks, library.playlists, library.historyEvents);
+    discoveryView.render({
+      tracks: library.tracks,
+      events: library.historyEvents,
+      loaded: { A: state.loadedMeta.A ?? undefined, B: state.loadedMeta.B ?? undefined },
+      history: recommendationHistory,
+    });
     searchView.render(library.tracks, library.playlists);
     const route = router.current();
     if (route.name === 'album') collectionView.render('album', route.album, library.tracks);
