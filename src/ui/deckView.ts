@@ -2,8 +2,9 @@ import type { DeckId } from '../audio/deck.js';
 import type { LoopBeats } from '../audio/key.js';
 import { formatBpm, formatTimeTenths, clamp } from '../util/format.js';
 import { PITCH_RANGE } from '../audio/rate.js';
-import { IMPLEMENTED_FX, UNIMPLEMENTED_FX_REASON, type FxKind } from '../audio/fx.js';
+import { IMPLEMENTED_FX, type FxKind } from '../audio/fx.js';
 import { HOT_CUE_COLORS, WaveformView } from './waveform.js';
+import { icon } from './icons.js';
 
 export interface DeckCallbacks {
   onPlayPause(): void;
@@ -14,6 +15,13 @@ export interface DeckCallbacks {
   onLoopOut(): void;
   onLoopExit(): void;
   onLoopBeats(beats: LoopBeats): void;
+  /** Salto de compases (beat jump), en beats. */
+  onBeatJump(beats: number): void;
+  /** Loop roll momentáneo de 4 beats. */
+  onLoopRoll(): void;
+  /** Activa/desactiva slip mode. */
+  onSlipToggle(): void;
+  onShowLyrics(): void;
   onPitch(rate: number): void;
   onPitchReset(): void;
   onSync(): void;
@@ -40,6 +48,7 @@ export interface DeckTrackInfo {
   peaks: number[];
   artwork: string | null;
   hotCues: (number | null)[];
+  lyrics?: string;
 }
 
 export interface DeckVisualState {
@@ -51,6 +60,7 @@ export interface DeckVisualState {
   hotCues: (number | null)[];
   beatSec: number | null;
   effectiveBpm: number | null;
+  slip: boolean;
 }
 
 const SCRUB_SECONDS_PER_PX = 0.004;
@@ -71,6 +81,7 @@ export class DeckView {
   readonly el: HTMLElement;
   private readonly wave: WaveformView;
   private readonly cb: DeckCallbacks;
+  private readonly deckId: DeckId;
 
   private readonly artworkEl: HTMLImageElement;
   private readonly artworkFallback: HTMLElement;
@@ -90,6 +101,7 @@ export class DeckView {
   private readonly fxSelect: HTMLSelectElement;
   private readonly fxAmount: HTMLInputElement;
   private readonly rateSlider: HTMLInputElement;
+  private readonly lyricsBtn: HTMLButtonElement;
   private readonly hotCueButtons: HTMLButtonElement[] = [];
   private readonly loopSizeButtons: HTMLButtonElement[] = [];
 
@@ -102,6 +114,7 @@ export class DeckView {
 
   constructor(id: DeckId, accent: string, canvasAccent: string, cb: DeckCallbacks) {
     this.cb = cb;
+    this.deckId = id;
     this.el = document.createElement('section');
     this.el.className = `deck deck-${id.toLowerCase()}`;
     this.el.innerHTML = `
@@ -117,6 +130,7 @@ export class DeckView {
           <span class="deck-tags">
             <span class="tag tag-key" title="Tonalidad">—</span>
             <span class="tag tag-genre" title="Género"></span>
+            <button class="btn btn-mini btn-lyrics" title="Ver letra sincronizada" aria-label="Ver letra" disabled>Letra</button>
           </span>
         </div>
         <div class="deck-bpm">
@@ -132,7 +146,7 @@ export class DeckView {
       </div>
       <div class="wave-wrap">
         <canvas class="wave" aria-label="Forma de onda del Deck ${id}: clic para buscar"></canvas>
-        <button class="btn btn-mini btn-zoom" title="Zoom de la forma de onda" aria-label="Cambiar zoom">🔍 1×</button>
+        <button class="btn btn-mini btn-zoom" title="Zoom de la forma de onda" aria-label="Cambiar zoom">${icon('search', 13)} <span>1×</span></button>
       </div>
       <div class="deck-times">
         <span class="time-elapsed">0:00.0</span>
@@ -152,6 +166,10 @@ export class DeckView {
         <button class="btn btn-mini btn-loop-in" aria-label="Entrada del loop">In</button>
         <button class="btn btn-mini btn-loop-out" aria-label="Salida del loop">Out</button>
         <button class="btn btn-mini btn-loop-exit" aria-label="Salir del loop">✕</button>
+        <button class="btn btn-mini btn-beat-jump" data-delta="-4" aria-label="Retroceder 4 beats" title="Beat jump −4">−4</button>
+        <button class="btn btn-mini btn-beat-jump" data-delta="4" aria-label="Avanzar 4 beats" title="Beat jump +4">+4</button>
+        <button class="btn btn-mini btn-loop-roll" aria-label="Loop roll de 4 beats" title="Loop roll: bucle breve que se libera solo">Roll</button>
+        <button class="btn btn-mini btn-slip" aria-label="Activar modo slip" title="Slip mode: al salir del loop vuelve a la posición virtual">Slip</button>
       </div>
       <div class="deck-hotcues" role="group" aria-label="Hot cues del Deck ${id}">
         ${HOT_CUE_COLORS.map((_, i) => `<button class="btn btn-mini hot-cue" data-index="${i}" style="--hc:${HOT_CUE_COLORS[i]}"><i>${i + 1}</i><em></em></button>`).join('')}
@@ -162,8 +180,6 @@ export class DeckView {
           <select class="fx-select" aria-label="Efecto del deck">
             <option value="">FX off</option>
             ${IMPLEMENTED_FX.map((k) => `<option value="${k}">${k}</option>`).join('')}
-            <option value="reverse" disabled title="${UNIMPLEMENTED_FX_REASON['reverse']}">reverse (requiere worklet)</option>
-            <option value="beatrepeat" disabled title="${UNIMPLEMENTED_FX_REASON['beatrepeat']}">beat repeat (requiere worklet)</option>
           </select>
         </label>
         <label class="fx-row">Amt <input class="fx-amount" type="range" min="0" max="1" step="0.01" value="0.5" aria-label="Intensidad del FX"></label>
@@ -184,7 +200,7 @@ export class DeckView {
     this.btnZoom = qs(this.el, '.btn-zoom');
     this.btnZoom.addEventListener('click', () => this.wave.cycleZoom());
     this.wave.onZoomChange = (zoom) => {
-      this.btnZoom.textContent = `🔍 ${zoom}×`;
+      this.btnZoom.innerHTML = `${icon('search', 13)} <span>${zoom}×</span>`;
     };
 
     this.artworkEl = qs(this.el, '.deck-artwork-img');
@@ -204,6 +220,7 @@ export class DeckView {
     this.fxSelect = qs(this.el, '.fx-select');
     this.fxAmount = qs(this.el, '.fx-amount');
     this.rateSlider = qs(this.el, '.rate');
+    this.lyricsBtn = qs(this.el, '.btn-lyrics');
 
     qs(this.el, '.btn-stop').addEventListener('click', () => this.cb.onStop());
     qs(this.el, '.btn-cue').addEventListener('click', () => this.cb.onCueJump());
@@ -212,6 +229,12 @@ export class DeckView {
     qs(this.el, '.btn-loop-in').addEventListener('click', () => this.cb.onLoopIn());
     qs(this.el, '.btn-loop-out').addEventListener('click', () => this.cb.onLoopOut());
     qs(this.el, '.btn-loop-exit').addEventListener('click', () => this.cb.onLoopExit());
+    for (const btn of [...this.el.querySelectorAll<HTMLButtonElement>('.btn-beat-jump')]) {
+      btn.addEventListener('click', () => this.cb.onBeatJump(Number(btn.dataset.delta ?? 0)));
+    }
+    qs(this.el, '.btn-loop-roll').addEventListener('click', () => this.cb.onLoopRoll());
+    qs(this.el, '.btn-slip').addEventListener('click', () => this.cb.onSlipToggle());
+    this.lyricsBtn.addEventListener('click', () => this.cb.onShowLyrics());
     qs(this.el, '.btn-rate-reset').addEventListener('click', () => {
       this.rateSlider.value = '1';
       this.rateValEl.textContent = formatPitch(1);
@@ -262,7 +285,7 @@ export class DeckView {
   }
 
   private emptyState(): DeckVisualState {
-    return { position: 0, duration: 0, playing: false, loop: null, cue: null, hotCues: this.hotCues, beatSec: null, effectiveBpm: null };
+    return { position: 0, duration: 0, playing: false, loop: null, cue: null, hotCues: this.hotCues, beatSec: null, effectiveBpm: null, slip: false };
   }
 
   private wireJog(): void {
@@ -373,6 +396,15 @@ export class DeckView {
 
   update(state: DeckVisualState): void {
     this.playing = state.playing;
+    const waveCanvas = this.el.querySelector<HTMLCanvasElement>('.wave');
+    if (waveCanvas) {
+      const position = formatTimeTenths(state.position);
+      const remaining = formatTimeTenths(Math.max(0, state.duration - state.position));
+      waveCanvas.setAttribute(
+        'aria-label',
+        `Forma de onda del Deck ${this.deckId}: posición ${position}, restante ${remaining}. Usa las flechas o los controles de búsqueda para navegar.`,
+      );
+    }
     this.btnPlay.textContent = state.playing ? '⏸ Pausa' : '▶ Play';
     this.btnPlay.classList.toggle('playing', state.playing);
 
@@ -387,6 +419,9 @@ export class DeckView {
       qs(this.el, '.btn-loop-in'),
       qs(this.el, '.btn-loop-out'),
       qs(this.el, '.btn-loop-exit'),
+      ...this.el.querySelectorAll<HTMLButtonElement>('.btn-beat-jump'),
+      qs(this.el, '.btn-loop-roll'),
+      qs(this.el, '.btn-slip'),
     ]) {
       (btn as HTMLButtonElement).disabled = disabled;
     }
@@ -400,6 +435,8 @@ export class DeckView {
         ? `⟳ ${state.loop.start.toFixed(1)}s → ${state.loop.end.toFixed(1)}s`
         : '';
     qs(this.el, '.btn-loop-exit').classList.toggle('active', state.loop !== null);
+    qs(this.el, '.btn-slip').classList.toggle('active', state.slip);
+    qs(this.el, '.btn-slip').setAttribute('aria-pressed', String(state.slip));
 
     if (state.duration > 0) {
       this.wave.update({

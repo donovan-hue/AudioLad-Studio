@@ -1,8 +1,10 @@
 import type { TrackMeta } from '../library/library.js';
 import { formatBpm, formatTime } from '../util/format.js';
+import { icon } from './icons.js';
 
 export interface QueueCallbacks {
   onNext(): void;
+  onPlayNow(trackId: string): void;
   onRemove(trackId: string): void;
   onMove(trackId: string, delta: -1 | 1): void;
   onClear(): void;
@@ -27,9 +29,9 @@ export class QueueView {
       <div class="panel-head">
         <button class="btn btn-next" aria-label="Cargar y reproducir la siguiente de la cola">▶ Reproducir siguiente</button>
         <label class="panel-check"><input class="queue-auto" type="checkbox" checked> Auto (al terminar una pista)</label>
-        <button class="btn btn-mini queue-clear" aria-label="Vaciar la cola">🗑 Vaciar</button>
+        <button class="btn btn-mini queue-clear" aria-label="Vaciar la cola">${icon('trash', 15)}<span>Vaciar</span></button>
         <input class="queue-name" type="text" placeholder="Nombre de playlist" maxlength="60" aria-label="Nombre para guardar la cola">
-        <button class="btn btn-mini queue-save" aria-label="Guardar la cola como playlist">💾 Guardar como playlist</button>
+        <button class="btn btn-mini queue-save" aria-label="Guardar la cola como playlist">${icon('save', 15)}<span>Guardar como playlist</span></button>
       </div>
       <ul class="queue-list" aria-label="Pistas en cola"></ul>
       <div class="panel-empty queue-empty" hidden>La cola está vacía: añade pistas desde la Biblioteca con "＋ Cola".</div>
@@ -82,7 +84,7 @@ export class QueueView {
       controls.append(
         mk('↑', 'Subir en la cola', index === 0, () => this.cb.onMove(trackId, -1)),
         mk('↓', 'Bajar en la cola', index === queue.length - 1, () => this.cb.onMove(trackId, 1)),
-        mk('▶', 'Cargar ahora', false, () => this.cb.onNext()),
+        mk('▶', 'Cargar ahora', false, () => this.cb.onPlayNow(trackId)),
         mk('✕', 'Quitar de la cola', false, () => this.cb.onRemove(trackId)),
       );
       li.appendChild(controls);

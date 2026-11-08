@@ -1,0 +1,24 @@
+{
+  "name": "AudioLad Studio — Cabina DJ Digital",
+  "short_name": "AudioLad",
+  "description": "Cabina DJ completa en el navegador: biblioteca local, mezcla, grabación y conversión.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["music", "entertainment", "productivity"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Cabina DJ", "short_name": "Cabina", "url": "./#/cabina", "description": "Abrir la cabina" },
+    { "name": "Tu biblioteca", "short_name": "Biblioteca", "url": "./#/library", "description": "Abrir la biblioteca" },
+    { "name": "Cola", "short_name": "Cola", "url": "./#/queue", "description": "Abrir la cola" }
+  ]
+}

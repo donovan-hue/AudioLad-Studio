@@ -2,10 +2,8 @@
  * Efectos reales por deck (insert): cada FX es una cadena Web Audio con
  * mezcla dry/wet. Arquitectura modular: agregar un FX = añadir un factory.
  *
- * "reverse" y "beatrepeat" están en el catálogo pero NO se pueden ejecutar
- * con fidelidad sobre un AudioBufferSourceNode en marcha (requieren lookahead
- * y reproducir al revés: AudioWorklet + buffer espejo). Se muestran
- * deshabilitados con esa razón exacta — nunca como botones falsos.
+ * reverse y beatrepeat se ejecutan en el transporte del Deck (buffer espejo
+ * precalculado y loop de medio beat), no como inserts de la cadena FX.
  */
 export type FxKind = 'echo' | 'reverb' | 'flanger' | 'phaser' | 'reverse' | 'beatrepeat';
 

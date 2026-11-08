@@ -1,4 +1,5 @@
 /** Tema claro/oscuro reales: dos sistemas visuales completos sobre CSS vars. */
+import { icon } from './icons.js';
 export type Theme = 'dark' | 'light';
 
 const KEY = 'musical-system.theme';
@@ -25,13 +26,15 @@ export function applyTheme(theme: Theme): void {
 export function installThemeToggle(button: HTMLButtonElement, toast: (msg: string) => void): void {
   let theme = loadTheme();
   applyTheme(theme);
-  const label = (): string => (theme === 'dark' ? '☀️ Modo claro' : '🌙 Modo oscuro');
-  button.textContent = label();
-  button.setAttribute('aria-label', 'Cambiar entre modo claro y oscuro');
+  const paint = (): void => {
+    button.innerHTML = `${icon(theme === 'dark' ? 'sun' : 'moon', 18)}<span>${theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}</span>`;
+    button.setAttribute('aria-label', 'Cambiar entre modo claro y oscuro');
+  };
+  paint();
   button.addEventListener('click', () => {
     theme = theme === 'dark' ? 'light' : 'dark';
     applyTheme(theme);
-    button.textContent = label();
+    paint();
     toast(`Modo ${theme === 'dark' ? 'oscuro' : 'claro'} activado.`);
   });
 }

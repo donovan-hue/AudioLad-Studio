@@ -10,8 +10,8 @@ export interface WaveformMarker {
 }
 
 export const HOT_CUE_COLORS = [
-  '#f87171', '#fb923c', '#facc15', '#4ade80',
-  '#2dd4bf', '#60a5fa', '#a78bfa', '#f472b6',
+  '#7fffe4', '#4ff3d2', '#2ff3cf', '#00e0bd',
+  '#00c2a8', '#00a48f', '#008a78', '#007063',
 ] as const;
 
 /**

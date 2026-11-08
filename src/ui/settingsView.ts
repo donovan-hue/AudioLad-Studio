@@ -1,6 +1,13 @@
+import { icon } from './icons.js';
+
 export interface SettingsCallbacks {
   onResetMixer(): void;
   onExportLibrary(): void;
+  onConfigureShortcuts(): void;
+  onCrossfade(seconds: number): void;
+  onNormalize(enabled: boolean): void;
+  onKeylock(enabled: boolean): void;
+  onInstall(): void;
 }
 
 export class SettingsView {
@@ -9,6 +16,11 @@ export class SettingsView {
   private readonly storageUsageEl: HTMLElement;
   private readonly audioStateEl: HTMLElement;
   private readonly audioRateEl: HTMLElement;
+  private readonly crossfadeInput: HTMLInputElement;
+  private readonly crossfadeVal: HTMLElement;
+  private readonly normalizeInput: HTMLInputElement;
+  private readonly keylockInput: HTMLInputElement;
+  private readonly installButton: HTMLButtonElement;
 
   constructor(cb: SettingsCallbacks) {
     this.el = document.createElement('div');
@@ -19,7 +31,7 @@ export class SettingsView {
       </div>
       <div class="settings-grid">
         <section class="settings-card">
-          <h3>💾 Almacenamiento Local</h3>
+          <h3>Almacenamiento local</h3>
           <p class="settings-desc">AudioLad Studio almacena los audios y metadatos en tu dispositivo para garantizar privacidad y trabajo sin conexión.</p>
           <div class="settings-metric">
             <span class="metric-label">Mecanismo activo:</span>
@@ -30,12 +42,12 @@ export class SettingsView {
             <span class="metric-val storage-usage">Calculando…</span>
           </div>
           <div class="settings-actions">
-            <button class="btn btn-mini btn-export-lib" aria-label="Exportar biblioteca">📥 Exportar metadatos (JSON)</button>
+            <button class="btn btn-mini btn-export-lib" aria-label="Exportar biblioteca">${icon('download', 15)}<span>Exportar metadatos (JSON)</span></button>
           </div>
         </section>
 
         <section class="settings-card">
-          <h3>🔊 Motor de Audio Web Audio</h3>
+          <h3>Motor de audio Web Audio</h3>
           <p class="settings-desc">Cadena de procesamiento interna con AudioContext de 32 bits en coma flotante.</p>
           <div class="settings-metric">
             <span class="metric-label">Estado del contexto:</span>
@@ -46,18 +58,40 @@ export class SettingsView {
             <span class="metric-val audio-rate">—</span>
           </div>
           <div class="settings-actions">
-            <button class="btn btn-mini btn-reset-mixer" aria-label="Restablecer mezclador">↺ Restablecer faders y EQ</button>
+            <button class="btn btn-mini btn-reset-mixer" aria-label="Restablecer mezclador">${icon('refresh', 15)}<span>Restablecer faders y EQ</span></button>
+            <button class="btn btn-mini btn-install-app" aria-label="Instalar AudioLad Studio como aplicación" disabled>${icon('download', 15)}<span>Instalar app</span></button>
           </div>
         </section>
 
+        <section class="settings-card playback-card">
+          <h3>Reproducción</h3>
+          <p class="settings-desc">Transiciones automáticas, sonoridad y continuidad entre pistas.</p>
+          <label class="settings-range">
+            <span>Crossfade automático <strong class="crossfade-val">0 s</strong></span>
+            <input class="settings-crossfade" type="range" min="0" max="12" step="0.5" value="0" aria-label="Duración del crossfade en segundos">
+          </label>
+          <p class="settings-desc">0 s = corte directo. El crossfade usa los dos decks y precarga la siguiente pista de la cola.</p>
+          <label class="settings-check">
+            <input class="settings-normalize" type="checkbox" checked>
+            <span>Normalizar volumen a −14 LUFS (máx. ±12 dB)</span>
+          </label>
+          <label class="settings-check">
+            <input class="settings-keylock" type="checkbox">
+            <span>Keylock (pitch constante al cambiar tempo, AudioWorklet)</span>
+          </label>
+        </section>
+
         <section class="settings-card shortcuts-card">
-          <h3>⌨️ Atajos de Teclado</h3>
+          <h3>Atajos de teclado</h3>
           <div class="shortcuts-table-wrap">
             <table class="shortcuts-table" aria-label="Atajos de teclado de AudioLad Studio">
               <thead>
                 <tr><th>Tecla</th><th>Acción en cabina</th></tr>
               </thead>
               <tbody>
+                <tr><td><kbd>Ctrl/⌘</kbd> + <kbd>K</kbd></td><td>Abrir la paleta de comandos</td></tr>
+                <tr><td><kbd>/</kbd></td><td>Ir a Buscar</td></tr>
+                <tr><td><kbd>Ctrl/⌘</kbd> + <kbd>⇧</kbd> + <kbd>Q</kbd></td><td>Abrir la cola</td></tr>
                 <tr><td><kbd>Q</kbd></td><td>Play / Pausa Deck A</td></tr>
                 <tr><td><kbd>P</kbd></td><td>Play / Pausa Deck B</td></tr>
                 <tr><td><kbd>Espacio</kbd></td><td>Play / Pausa Deck activo (según Crossfader)</td></tr>
@@ -67,6 +101,9 @@ export class SettingsView {
               </tbody>
             </table>
           </div>
+          <div class="settings-actions">
+            <button class="btn btn-mini btn-configure-shortcuts" aria-label="Configurar atajos globales">${icon('command', 15)}<span>Configurar atajos globales</span></button>
+          </div>
         </section>
       </div>
     `;
@@ -75,6 +112,11 @@ export class SettingsView {
     this.storageUsageEl = this.el.querySelector('.storage-usage') as HTMLElement;
     this.audioStateEl = this.el.querySelector('.audio-state') as HTMLElement;
     this.audioRateEl = this.el.querySelector('.audio-rate') as HTMLElement;
+    this.crossfadeInput = this.el.querySelector('.settings-crossfade') as HTMLInputElement;
+    this.crossfadeVal = this.el.querySelector('.crossfade-val') as HTMLElement;
+    this.normalizeInput = this.el.querySelector('.settings-normalize') as HTMLInputElement;
+    this.keylockInput = this.el.querySelector('.settings-keylock') as HTMLInputElement;
+    this.installButton = this.el.querySelector('.btn-install-app') as HTMLButtonElement;
 
     this.el.querySelector('.btn-reset-mixer')?.addEventListener('click', () => {
       cb.onResetMixer();
@@ -82,8 +124,37 @@ export class SettingsView {
     this.el.querySelector('.btn-export-lib')?.addEventListener('click', () => {
       cb.onExportLibrary();
     });
+    this.el.querySelector('.btn-configure-shortcuts')?.addEventListener('click', () => {
+      cb.onConfigureShortcuts();
+    });
+    this.crossfadeInput.addEventListener('input', () => {
+      const seconds = Number(this.crossfadeInput.value);
+      this.crossfadeVal.textContent = `${seconds} s`;
+      cb.onCrossfade(seconds);
+    });
+    this.normalizeInput.addEventListener('change', () => {
+      cb.onNormalize(this.normalizeInput.checked);
+    });
+    this.keylockInput.addEventListener('change', () => {
+      cb.onKeylock(this.keylockInput.checked);
+    });
+    this.installButton.addEventListener('click', () => cb.onInstall());
 
     this.updateStorageEstimate();
+  }
+
+  setInstallAvailable(available: boolean): void {
+    this.installButton.disabled = !available;
+    this.installButton.title = available
+      ? 'Instalar AudioLad Studio como aplicación de escritorio'
+      : 'La instalación la ofrece el navegador cuando la app cumple los requisitos';
+  }
+
+  setPlaybackSettings(settings: { crossfadeSec: number; normalize: boolean; keylock: boolean }): void {
+    this.crossfadeInput.value = String(settings.crossfadeSec);
+    this.crossfadeVal.textContent = `${settings.crossfadeSec} s`;
+    this.normalizeInput.checked = settings.normalize;
+    this.keylockInput.checked = settings.keylock;
   }
 
   setStorageKind(kind: 'opfs' | 'indexeddb' | 'memory'): void {

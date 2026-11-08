@@ -132,3 +132,48 @@ describe('historial y grabaciones', () => {
     expect(l.getTrack(t.id)?.key?.label).toBe('Am');
   });
 });
+
+describe('playlists: portada y reordenación', () => {
+  it('mueve una pista antes de otra y persiste el orden', async () => {
+    const store = new MemoryStore();
+    const l = new Library(store);
+    await l.init();
+    const a = await l.addTrack(meta({ title: 'A' }), new Uint8Array([1]));
+    const b = await l.addTrack(meta({ title: 'B' }), new Uint8Array([2]));
+    const c = await l.addTrack(meta({ title: 'C' }), new Uint8Array([3]));
+    const playlist = await l.createPlaylist('Orden');
+    for (const track of [a, b, c]) await l.addToPlaylist(playlist.id, track.id);
+
+    expect(await l.reorderPlaylist(playlist.id, c.id, a.id)).toBe(true);
+    expect(l.playlists[0]?.trackIds).toEqual([c.id, a.id, b.id]);
+    expect(await l.reorderPlaylist(playlist.id, a.id, a.id)).toBe(false);
+
+    const reloaded = new Library(store);
+    await reloaded.init();
+    expect(reloaded.playlists[0]?.trackIds).toEqual([c.id, a.id, b.id]);
+  });
+
+  it('guarda y elimina la portada', async () => {
+    const l = await lib();
+    const playlist = await l.createPlaylist('Portada');
+    await l.setPlaylistCover(playlist.id, 'data:image/jpeg;base64,AAAA');
+    expect(l.playlists[0]?.coverUrl).toBe('data:image/jpeg;base64,AAAA');
+    await l.setPlaylistCover(playlist.id, null);
+    expect(l.playlists[0]?.coverUrl).toBeUndefined();
+  });
+});
+
+describe('papelera (deshacer)', () => {
+  it('restaura la pista con sus bytes', async () => {
+    const store = new MemoryStore();
+    const l = new Library(store);
+    await l.init();
+    const track = await l.addTrack(meta({ title: 'Borrada' }), new Uint8Array([7, 8, 9]));
+    const bytes = new Uint8Array([7, 8, 9]);
+    await l.removeTrack(track.id);
+    expect(l.getTrack(track.id)).toBeNull();
+    await l.restoreTrack(track, bytes);
+    expect(l.getTrack(track.id)?.title).toBe('Borrada');
+    await expect(store.getBytes(track.id)).resolves.toEqual(new Uint8Array([7, 8, 9]));
+  });
+});

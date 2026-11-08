@@ -3,6 +3,7 @@ import { Deck, type DeckId } from './deck.js';
 import type { MixerState } from './settings.js';
 import { DEFAULT_MIXER_STATE } from './settings.js';
 import { Sampler } from './sampler.js';
+import { MasterEq } from './masterEq.js';
 
 /**
  * Dueño del único AudioContext. Topología:
@@ -18,6 +19,7 @@ import { Sampler } from './sampler.js';
 export class AudioEngine {
   private ctx: AudioContext | null = null;
   private masterIn: GainNode | null = null;
+  private masterEq: MasterEq | null = null;
   private masterGain: GainNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private masterAnalyser: AnalyserNode | null = null;
@@ -44,6 +46,7 @@ export class AudioEngine {
     this.ctx = ctx;
 
     this.masterIn = ctx.createGain();
+    this.masterEq = new MasterEq(ctx);
     this.masterGain = ctx.createGain();
     this.masterAnalyser = ctx.createAnalyser();
     this.masterAnalyser.fftSize = 2048;
@@ -113,6 +116,15 @@ export class AudioEngine {
     this.masterGain!.gain.setTargetAtTime(v * v, this.ctx!.currentTime, 0.02);
   }
 
+  /** Fade del master sin cambiar el valor lógico del fader (sleep/crossfade). */
+  fadeMaster(position: number, seconds: number): void {
+    this.ensure();
+    const v = Math.min(1, Math.max(0, position));
+    const now = this.ctx!.currentTime;
+    if (seconds <= 0) this.masterGain!.gain.setValueAtTime(v * v, now);
+    else this.masterGain!.gain.setTargetAtTime(v * v, now, Math.max(0.02, seconds / 3));
+  }
+
   get limiterEnabled(): boolean {
     return this._limiterEnabled;
   }
@@ -162,15 +174,26 @@ export class AudioEngine {
     this.cueBus?.gain.setTargetAtTime(Math.sin((mix * Math.PI) / 2), now, 0.02);
   }
 
+  setMasterEqGains(gains: readonly number[]): void {
+    this.ensure();
+    this.masterEq!.setGains(gains);
+  }
+
+  get masterEqGains(): number[] {
+    return this.masterEq?.gains ?? [];
+  }
+
   /** Bypass = rewire the limiter out of the chain. */
   private wireMaster(): void {
     const ctx = this.ctx!;
     this.masterIn!.disconnect();
+    this.masterEq?.output.disconnect();
     this.masterGain!.disconnect();
     this.limiter?.disconnect();
     this.masterAnalyser!.disconnect();
 
-    this.masterIn!.connect(this.masterGain!);
+    this.masterIn!.connect(this.masterEq!.input);
+    this.masterEq!.output.connect(this.masterGain!);
     if (this._limiterEnabled) {
       this.masterGain!.connect(this.limiter!);
       this.limiter!.connect(this.masterAnalyser!);

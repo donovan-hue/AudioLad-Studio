@@ -10,7 +10,7 @@ export class HelpView {
       </div>
       <div class="help-content">
         <article class="help-section">
-          <h3>🎛️ 1. Decks A y B</h3>
+          <h3>1. Decks A y B</h3>
           <ul>
             <li><b>Play / Pausa & Stop</b>: Control de reproducción con retorno a Cue con Stop.</li>
             <li><b>Cue & Set</b>: <code>Set</code> marca el punto de retorno en la posición actual. <code>Cue</code> salta a ese punto inmediatamente.</li>
@@ -23,7 +23,7 @@ export class HelpView {
         </article>
 
         <article class="help-section">
-          <h3>🎚️ 2. Mezclador Central (Mixer)</h3>
+          <h3>2. Mezclador central (Mixer)</h3>
           <ul>
             <li><b>Canales A y B</b>: Trim de ganancia independiente, ecualizador de 3 bandas (−26 dB a +9 dB), filtro DJ bipolar (giro a la izquierda: paso bajo / LP; giro a la derecha: paso alto / HP).</li>
             <li><b>Monitoreo CUE</b>: Activa el botón CUE para enviar el canal al bus de auriculares.</li>
@@ -33,7 +33,7 @@ export class HelpView {
         </article>
 
         <article class="help-section">
-          <h3>🥁 3. Sampler y Grabadora</h3>
+          <h3>3. Sampler y grabadora</h3>
           <ul>
             <li><b>Sampler en vivo</b>: 6 instrumentos sintetizados en tiempo real mediante Web Audio (Kick, Snare, Clap, HiHat, Tom, Zap). No utiliza muestras estáticas; responde al instante por teclado (<kbd>A</kbd>–<kbd>H</kbd>) o pulsación táctil.</li>
             <li><b>Grabación del Master</b>: Graba directamente el flujo de audio digital post-limitador (sin micrófono). Soporta WebM/Opus, MP4 u OGG según el navegador. Guarda la sesión en la biblioteca o descárgala en tu disco.</li>
@@ -41,7 +41,7 @@ export class HelpView {
         </article>
 
         <article class="help-section">
-          <h3>⤓ 4. Convertidor y Fuentes Externas</h3>
+          <h3>4. Convertidor y fuentes externas</h3>
           <ul>
             <li><b>yt-dlp + FFmpeg</b>: Procesa URLs de audio conservando la calidad de origen (direct stream copy) o codificando a MP3 320 kbps.</li>
             <li><b>Seguridad y Privacidad</b>: Todas las peticiones están protegidas contra SSRF y respetan el almacenamiento local en tu navegador (OPFS / IndexedDB).</li>

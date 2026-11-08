@@ -80,6 +80,13 @@ describe('Library', () => {
     await lib.removeTrack(track.id);
     expect(lib.tracks).toHaveLength(0);
     expect(lib.getPlaylist(playlist.id)!.trackIds).toEqual([]);
+    // La papelera conserva los bytes hasta vaciarla.
+    expect(await store.getBytes(track.id)).not.toBeNull();
+    expect(lib.trash).toHaveLength(1);
+    expect(await lib.restoreFromTrash(track.id)).toBe(true);
+    expect(lib.getTrack(track.id)?.id).toBe(track.id);
+    await lib.removeTrack(track.id);
+    expect(await lib.emptyTrash()).toBe(1);
     expect(await store.getBytes(track.id)).toBeNull();
   });
 

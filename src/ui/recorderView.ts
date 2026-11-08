@@ -1,5 +1,6 @@
 import type { RecordingMeta } from '../library/library.js';
 import { formatBytes, formatTime } from '../util/format.js';
+import { icon } from './icons.js';
 
 export interface RecorderCallbacks {
   onRecordStart(): void | Promise<void>;
@@ -9,6 +10,8 @@ export interface RecorderCallbacks {
   onRecordStopAndSave(name: string): Promise<RecordingMeta>;
   onDiscard(): Promise<void>;
   onDelete(recordingId: string): void;
+  /** Exporta una grabación ya guardada a WAV o MP3. */
+  onExport(recordingId: string, format: 'wav' | 'mp3'): void;
 }
 
 type RecorderUiState = 'idle' | 'recording' | 'paused' | 'saving';
@@ -58,7 +61,7 @@ export class RecorderView {
       </div>
       <div class="rec-save" hidden>
         <input class="rec-name" type="text" maxlength="80" placeholder="Nombre de la sesión" aria-label="Nombre de la sesión">
-        <button class="btn btn-mini rec-save-btn" aria-label="Guardar la grabación">💾 Guardar sesión</button>
+        <button class="btn btn-mini rec-save-btn" aria-label="Guardar la grabación">${icon('save', 15)}<span>Guardar sesión</span></button>
         <button class="btn btn-mini rec-discard" aria-label="Descartar la grabación">✕ Descartar</button>
       </div>
       <ul class="rec-list" aria-label="Grabaciones guardadas"></ul>
@@ -194,17 +197,29 @@ export class RecorderView {
       const download = document.createElement('a');
       download.className = 'btn btn-mini';
       download.textContent = '⤓';
-      download.title = 'Descargar';
+      download.title = 'Descargar original';
       download.setAttribute('aria-label', `Descargar ${rec.name}`);
       download.href = '#';
       download.addEventListener('click', (e) => void this.handleDownload(e, rec, download));
+      const wav = document.createElement('button');
+      wav.className = 'btn btn-mini rec-export';
+      wav.textContent = 'WAV';
+      wav.title = 'Exportar a WAV';
+      wav.setAttribute('aria-label', `Exportar ${rec.name} a WAV`);
+      wav.addEventListener('click', () => this.cb.onExport(rec.id, 'wav'));
+      const mp3 = document.createElement('button');
+      mp3.className = 'btn btn-mini rec-export';
+      mp3.textContent = 'MP3';
+      mp3.title = 'Exportar a MP3';
+      mp3.setAttribute('aria-label', `Exportar ${rec.name} a MP3`);
+      mp3.addEventListener('click', () => this.cb.onExport(rec.id, 'mp3'));
       const del = document.createElement('button');
       del.className = 'btn btn-mini';
       del.textContent = '✕';
       del.title = 'Eliminar';
       del.setAttribute('aria-label', `Eliminar ${rec.name}`);
       del.addEventListener('click', () => this.cb.onDelete(rec.id));
-      controls.append(play, download, del);
+      controls.append(play, download, wav, mp3, del);
       li.appendChild(controls);
       this.listEl.appendChild(li);
     }

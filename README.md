@@ -2,6 +2,20 @@
 
 Estación DJ completa que corre 100% en el navegador (escritorio y móvil), con biblioteca local persistente, convertidor URL→MP3 real (yt-dlp + FFmpeg) y motor de audio Web Audio. Nada de mocks: cada control está conectado al motor.
 
+## Shell de navegación (tipo Spotify)
+
+- **Barra lateral fija**: Inicio, Buscar, Tu biblioteca, Cabina DJ y Cola; debajo, tus playlists y las herramientas (Sampler, Grabadora, Historial, Fuentes, Lotes, Configuración, Ayuda).
+- **Inicio editorial**: hero con estadísticas, «Sigue escuchando», favoritas, playlists, álbumes, novedades y pistas listas para mezclar.
+- **Búsqueda global**: pistas, álbumes, artistas y playlists, con filtros y búsquedas recientes persistidas.
+- **Barra inferior «Ahora suena»**: portada, título, BPM, transporte del deck activo, progreso con búsqueda, volumen master y acceso a la cola.
+- **Panel lateral «A continuación»**: la cola real, sin cambiar de página.
+- **Rutas reales y deep links**: `#/`, `#/search`, `#/library`, `#/playlist/:id`, `#/album/:nombre`, `#/artist/:nombre`, `#/cabina`, `#/queue` y `#/herramientas/:id`.
+- **Historial de navegación** con botones atrás/adelante del navegador.
+- **Command palette** con `Ctrl/⌘ + K` para navegar, reproducir, importar y cambiar el tema.
+- **Centro de notificaciones**: cada toast queda en un historial con contador de no leídas.
+- **Atajos globales configurables** (`Ctrl/⌘ + /` para el editor): se guardan en el navegador y se documentan en la paleta.
+- **Iconos SVG propios** en la shell y las vistas nuevas; sin emojis en la interfaz.
+
 ## La cabina (pantalla principal)
 
 **Deck A / Deck B** (independientes, cada uno con):
@@ -18,7 +32,7 @@ Estación DJ completa que corre 100% en el navegador (escritorio y móvil), con 
 - Por canal: **Trim (gain)**, High/Mid/Low (−26/+9 dB), **Filtro DJ** (LP↔HP real en un knob), Volumen, **CUE** (envío al bus de monitorización) y medidor de nivel con peak-hold.
 - Master: volumen, **limitador bypassable** con medidor de reducción de ganancia, espectro del bus, **CUE MIX** (mezcla master↔cue con ley de potencia constante) y **crossfader** de potencia constante (−3 dB al centro).
 
-## Paneles (pestañas inferiores)
+## Paneles (barra lateral)
 
 - **📚 Biblioteca**: búsqueda (título/artista/álbum/género), filtro ★ favoritas, orden (recientes/título/artista/BPM/duración), importar, **doble clic = previsualizar** (carga en un deck libre y reproduce), `→ A`/`→ B`, **＋ Cola**, playlists con orden real persistido y metadatos (título, artista, álbum, tonalidad, BPM, género, duración, artwork, fecha, origen, tamaño).
 - **⏭ Cola**: preparar la próxima mezcla — añadir desde la biblioteca, reordenar, quitar, "Reproducir siguiente" (al deck libre), auto-carga al terminar una pista (**auto-DJ**), vaciar y **guardar como playlist**.
@@ -54,7 +68,7 @@ npm install
 npm run dev        # cabina en http://localhost:5173
 npm run typecheck  # tsc --noEmit (estricto)
 npm run lint       # eslint
-npm run test       # vitest — 58 pruebas
+npm run test       # vitest — 111 pruebas
 npm run build      # typecheck + bundle en dist/
 npm run start      # producción: dist/ + /api/convert (PORT, default 8080)
 ```
@@ -70,19 +84,36 @@ src/
     sampler.ts    Síntesis en vivo de los 6 pads
     recorder.ts   MediaRecorder del bus master (estados reales, MIME soportado)
     key.ts        Tonalidad por cromas (DFT) + perfiles Krumhansl; beat grid y loops cuantizados (puro)
+    keylock.ts    Keylock por AudioWorklet (mantiene el tono al cambiar velocidad)
     analysis.ts   Picos de PCM, mono, estimación de BPM (puro)
     crossfade.ts  Ley de potencia constante (puro)   rate.ts  BPM efectivo/sync (puro)
     settings.ts   Estado persistente del mezclador
   library/
     storage.ts    OPFS → IndexedDB → memoria   library.ts  Pistas, playlists, cola, favoritos,
-                  hot cues, historial y grabaciones (persistido)
+                  hot cues, historial, papelera y grabaciones (persistido)
+    zip.ts        ZIP propio (store, sin dependencias)   bundle.ts  Exportar/importar biblioteca + audio
+    smart.ts      Playlists inteligentes evaluadas al vuelo
+  audio/fingerprint.ts  Huella de 256 bits para duplicados difusos
+  ui/lyrics.ts   Letras LRC con seguimiento sincronizado
+  ui/pwa.ts      Service worker, instalación y wake lock
   ui/             Cabina: decks, mixer, waveform (zoom/grid/hot cues), biblioteca, cola, sampler,
                   grabadora, historial, convertidor, tema claro/oscuro
+    shell.ts      Barra lateral, topbar, stack de páginas y panel de cola
+    router.ts     Rutas por hash, deep links e historial
+    homeView.ts   Inicio editorial (sigue escuchando, favoritas, álbumes…)
+    searchView.ts Búsqueda global con filtros y recientes
+    collectionView.ts  Páginas de álbum y artista
+    nowPlayingBar.ts   Barra persistente «Ahora suena»
+    notificationCenter.ts  Centro de actividad unificado con toasts
+    commandPalette.ts  Command palette (Ctrl/⌘+K)
+    shortcuts.ts  Atajos configurables + editor visual
+    components.ts Sistema de componentes (botones, tarjetas, modales)
+    icons.ts      Set de iconos SVG propio
   server/ (server/) POST /api/convert real + servidor de producción
-tests/            58 pruebas vitest sobre módulos puros
+tests/            111 pruebas vitest en 16 archivos (puros, ZIP/bundle, letras, huella y DOM)
 ```
 
-CI: `.github/workflows/ci.yml` — `npm ci → typecheck → lint → test → build` en cada push/PR (Node 22).
+CI: `.github/workflows/ci.yml` — `npm ci → typecheck → lint → test → build` en cada push/PR (Node 22). La suite incluye pruebas puras y una prueba de integración DOM (`jsdom`) que arranca la shell, navega entre páginas, abre la paleta, la cola, las notificaciones y el editor de atajos.
 
 ## Fase 5 — Biblioteca real, playlists y calidad de audio
 

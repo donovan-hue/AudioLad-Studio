@@ -1,6 +1,7 @@
 import type { DeckSettings, EqBand } from './settings.js';
 import { EQ_MAX_DB, EQ_MIN_DB } from './settings.js';
 import { createFxModule, type FxKind, type FxModule } from './fx.js';
+import { KeylockNode } from './keylock.js';
 
 export type DeckId = 'A' | 'B';
 
@@ -23,12 +24,15 @@ export class Deck {
   private readonly eqMid: BiquadFilterNode;
   private readonly eqHigh: BiquadFilterNode;
   private readonly trimGain: GainNode;
+  private readonly normalizationGain: GainNode;
   private readonly filterLP: BiquadFilterNode;
   private readonly filterHP: BiquadFilterNode;
   private readonly fxIn: GainNode;
   private readonly fxOut: GainNode;
   private readonly channelGain: GainNode;
   private readonly crossfadeGain: GainNode;
+  private readonly fadeGain: GainNode;
+  private readonly keylock: KeylockNode;
   readonly cueSendGain: GainNode;
   readonly analyser: AnalyserNode;
 
@@ -45,11 +49,20 @@ export class Deck {
   private startCtxTime = 0;
   private startOffset = 0;
   private _rate = 1;
+  private _speed = 1;
   private nudgeFactor = 1;
 
   private cuePoint: number | null = null;
   private loop: LoopRegion | null = null;
   private _duration = 0;
+  private _slip = false;
+  private slipAnchor: { position: number; time: number } | null = null;
+  private rollTimer: number | null = null;
+  private pendingNext: { source: AudioBufferSourceNode; timer: number } | null = null;
+  private baseBuffer: AudioBuffer | null = null;
+  private reversedBuffer: AudioBuffer | null = null;
+  private _reversed = false;
+  private _beatRepeat = false;
 
   onEnded: (() => void) | null = null;
 
@@ -73,6 +86,9 @@ export class Deck {
     this.trimGain = ctx.createGain();
     this.trimGain.gain.value = 1;
 
+    this.normalizationGain = ctx.createGain();
+    this.normalizationGain.gain.value = 1;
+
     // Filtro DJ: LP+HP en serie, neutros al centro (20 kHz / 10 Hz).
     this.filterLP = ctx.createBiquadFilter();
     this.filterLP.type = 'lowpass';
@@ -88,6 +104,9 @@ export class Deck {
 
     this.channelGain = ctx.createGain();
     this.crossfadeGain = ctx.createGain();
+    this.fadeGain = ctx.createGain();
+    this.fadeGain.gain.value = 1;
+    this.keylock = new KeylockNode(ctx);
     this.cueSendGain = ctx.createGain();
     this.cueSendGain.gain.value = 0;
     this.analyser = ctx.createAnalyser();
@@ -96,13 +115,16 @@ export class Deck {
     this.eqLow.connect(this.eqMid);
     this.eqMid.connect(this.eqHigh);
     this.eqHigh.connect(this.trimGain);
-    this.trimGain.connect(this.filterLP);
+    this.trimGain.connect(this.normalizationGain);
+    this.normalizationGain.connect(this.filterLP);
     this.filterLP.connect(this.filterHP);
     this.filterHP.connect(this.fxIn);
     this.fxIn.connect(this.fxOut); // dry (FX apagado)
     this.fxOut.connect(this.channelGain);
     this.channelGain.connect(this.crossfadeGain);
-    this.crossfadeGain.connect(this.analyser);
+    this.crossfadeGain.connect(this.fadeGain);
+    this.fadeGain.connect(this.keylock.input);
+    this.keylock.output.connect(this.analyser);
     this.analyser.connect(destination);
     this.channelGain.connect(this.cueSendGain);
     this.cueSendGain.connect(cueDestination);
@@ -120,13 +142,21 @@ export class Deck {
 
   /** Install a decoded buffer. Mixer-side settings (volume/EQ/pitch) are untouched. */
   load(buffer: AudioBuffer): void {
+    this.cancelScheduledNext();
     this.stopSource();
     this._playing = false;
+    this.baseBuffer = buffer;
+    this.reversedBuffer = null;
+    this._reversed = false;
+    this._beatRepeat = false;
     this.buffer = buffer;
     this._duration = buffer.duration;
     this.startOffset = 0;
     this.cuePoint = null;
     this.loop = null;
+    this.slipAnchor = null;
+    this.clearRollTimer();
+    this.fadeGain.gain.setValueAtTime(1, this.ctx.currentTime);
   }
 
   // ---------- Transport state ----------
@@ -139,6 +169,56 @@ export class Deck {
     return this._rate;
   }
 
+  get speed(): number {
+    return this._speed;
+  }
+
+  get slip(): boolean {
+    return this._slip;
+  }
+
+  get reversed(): boolean {
+    return this._reversed;
+  }
+
+  get beatRepeatActive(): boolean {
+    return this._beatRepeat;
+  }
+
+  setSlip(enabled: boolean): void {
+    this._slip = enabled;
+    if (!enabled) this.slipAnchor = null;
+  }
+
+  /** Multiplicador global de velocidad (0.5–2), independiente del pitch DJ. */
+  setSpeed(speed: number): void {
+    const next = Math.min(2, Math.max(0.5, speed));
+    if (next === this._speed) return;
+    const pos = this.position;
+    this._speed = next;
+    if (this._playing) {
+      this.startOffset = pos;
+      this.startCtxTime = this.ctx.currentTime;
+      this.source?.playbackRate.setValueAtTime(this.effectiveRate(), this.ctx.currentTime);
+    }
+    this.keylock.setRatio(this.effectiveRate());
+  }
+
+  /** Activa keylock (pitch constante al cambiar tempo). Puede fallar sin AudioWorklet. */
+  async setKeylock(enabled: boolean): Promise<boolean> {
+    if (enabled) {
+      const ok = await this.keylock.enable();
+      this.keylock.setRatio(this.effectiveRate());
+      return ok;
+    }
+    this.keylock.disable();
+    return true;
+  }
+
+  get keylockEnabled(): boolean {
+    return this.keylock.isEnabled;
+  }
+
   get cue(): number | null {
     return this.cuePoint;
   }
@@ -148,7 +228,7 @@ export class Deck {
   }
 
   private effectiveRate(): number {
-    return this._rate * this.nudgeFactor;
+    return this._rate * this.nudgeFactor * this._speed;
   }
 
   /** Current playback position in seconds, wrapped inside an active loop. */
@@ -180,6 +260,7 @@ export class Deck {
 
   pause(): void {
     if (!this._playing) return;
+    this.cancelScheduledNext();
     const pos = this.position;
     this.stopSource();
     this._playing = false;
@@ -188,6 +269,9 @@ export class Deck {
 
   /** CDJ-style stop: halt and return to the top. */
   stop(): void {
+    this.cancelScheduledNext();
+    this.clearRollTimer();
+    this.slipAnchor = null;
     this.stopSource();
     this._playing = false;
     this.startOffset = 0;
@@ -196,8 +280,13 @@ export class Deck {
   /** Seek; cancels an active loop, like a real CDJ jog does. */
   seek(seconds: number): void {
     if (!this.buffer) return;
+    this._beatRepeat = false;
+    this.cancelScheduledNext();
     const target = Math.min(Math.max(0, seconds), this._duration);
-    if (this.loop) this.setLoop(null);
+    if (this.loop) {
+      this.slipAnchor = null;
+      this.applyLoop(null);
+    }
     if (this._playing) {
       this.stopSource();
       this.startOffset = target;
@@ -211,17 +300,72 @@ export class Deck {
   /** Set the cue point at the current position. */
   setCue(): void {
     if (!this.buffer) return;
-    this.cuePoint = this.position;
+    this.cuePoint = this._reversed ? this._duration - this.position : this.position;
   }
 
   /** Jump to the cue point (or the top when none), keeping play state. */
   cueJump(): void {
-    this.seek(this.cuePoint ?? 0);
+    if (this.cuePoint === null) {
+      this.seek(0);
+      return;
+    }
+    this.seek(this._reversed ? this._duration - this.cuePoint : this.cuePoint);
+  }
+
+  /** Reproducción inversa real con buffer espejo precalculado. */
+  setReverse(enabled: boolean): void {
+    if (!this.baseBuffer || enabled === this._reversed) return;
+    const current = this.position;
+    const target = Math.max(0, Math.min(this._duration, this._duration - current));
+    if (enabled && !this.reversedBuffer) this.reversedBuffer = reverseBuffer(this.ctx, this.baseBuffer);
+    const wasPlaying = this._playing;
+    this.cancelScheduledNext();
+    this.stopSource();
+    this._playing = false;
+    this._reversed = enabled;
+    this._beatRepeat = false;
+    this.buffer = enabled ? this.reversedBuffer : this.baseBuffer;
+    this.loop = null;
+    this.slipAnchor = null;
+    this.startOffset = target;
+    if (wasPlaying) this.play();
+  }
+
+  /** Beat repeat: congela medio beat y lo repite mientras el FX esté activo. */
+  startBeatRepeat(beatSec: number): void {
+    if (!this.buffer || !Number.isFinite(beatSec) || beatSec <= 0) return;
+    this.cancelScheduledNext();
+    this._beatRepeat = true;
+    const start = this.position;
+    const length = Math.max(0.05, beatSec / 2);
+    this.applyLoop({ start, end: Math.min(this._duration, start + length) });
+    if (!this._playing) this.play();
+  }
+
+  stopBeatRepeat(): void {
+    if (!this._beatRepeat) return;
+    this._beatRepeat = false;
+    this.applyLoop(null);
   }
 
   // ---------- Loop ----------
 
   setLoop(region: LoopRegion | null): void {
+    const now = this.ctx.currentTime;
+    if (region && !this.loop && this._slip && this._playing) {
+      this.slipAnchor = { position: this.position, time: now };
+    }
+    if (!region && this.loop && this.slipAnchor) {
+      const virtual = this.slipAnchor.position + (now - this.slipAnchor.time) * this.effectiveRate();
+      this.slipAnchor = null;
+      this.applyLoop(null);
+      this.seek(virtual);
+      return;
+    }
+    this.applyLoop(region);
+  }
+
+  private applyLoop(region: LoopRegion | null): void {
     if (region && region.end - region.start < 0.02) return; // Demasiado corto.
     this.loop = region;
     const src = this.source;
@@ -236,15 +380,47 @@ export class Deck {
     }
   }
 
+  /** Salto por compases/beats cuantizado al BPM actual. */
+  beatJump(beats: number, beatSec: number): void {
+    if (!this.buffer || !Number.isFinite(beatSec) || beatSec <= 0) return;
+    this.seek(this.position + beats * beatSec);
+  }
+
+  /** Loop roll: bucle breve que se libera solo y devuelve la posición virtual. */
+  loopRoll(beats: number, beatSec: number): void {
+    if (!this.buffer || !Number.isFinite(beatSec) || beatSec <= 0) return;
+    const start = this.position;
+    const length = Math.max(0.05, Math.min(this._duration - start, beats * beatSec));
+    if (length <= 0.05) return;
+    this.clearRollTimer();
+    this.slipAnchor = null;
+    this.setLoop({ start, end: start + length });
+    if (!this._playing) this.play();
+    const ms = (length / this.effectiveRate()) * 1000;
+    this.rollTimer = window.setTimeout(() => {
+      this.rollTimer = null;
+      this.slipAnchor = null;
+      this.applyLoop(null);
+      this.seek(Math.min(this._duration, start + length));
+    }, ms);
+  }
+
+  private clearRollTimer(): void {
+    if (this.rollTimer !== null) {
+      window.clearTimeout(this.rollTimer);
+      this.rollTimer = null;
+    }
+  }
+
   loopIn(): void {
-    if (!this.buffer) return;
+    if (!this.buffer || this._reversed) return;
     const pos = this.position;
     const end = this.loop && this.loop.end > pos ? this.loop.end : this._duration;
     this.setLoop({ start: pos, end });
   }
 
   loopOut(): void {
-    if (!this.buffer) return;
+    if (!this.buffer || this._reversed) return;
     const pos = this.position;
     if (this.loop && pos > this.loop.start + 0.05) {
       this.setLoop({ start: this.loop.start, end: pos });
@@ -265,6 +441,7 @@ export class Deck {
       this.startCtxTime = this.ctx.currentTime;
       this.source?.playbackRate.setValueAtTime(this.effectiveRate(), this.ctx.currentTime);
     }
+    this.keylock.setRatio(this.effectiveRate());
   }
 
   /** Jog while playing: temporary tempo bend (e.g. 1.06). */
@@ -276,6 +453,7 @@ export class Deck {
       this.startCtxTime = this.ctx.currentTime;
       this.source?.playbackRate.setValueAtTime(this.effectiveRate(), this.ctx.currentTime);
     }
+    this.keylock.setRatio(this.effectiveRate());
   }
 
   clearNudge(): void {
@@ -346,6 +524,24 @@ export class Deck {
     return this.fxModule?.kind ?? null;
   }
 
+  /** Ganancia de normalización de sonoridad, en dB (0 = sin cambios). */
+  setNormalizationGain(db: number): void {
+    const gain = Math.pow(10, Math.min(12, Math.max(-12, db)) / 20);
+    this.normalizationGain.gain.setTargetAtTime(gain, this.ctx.currentTime, 0.03);
+  }
+
+  /** Fade de transición (crossfade/gapless) sin tocar el fader del usuario. */
+  setFade(gain: number, seconds = 0): void {
+    const value = Math.min(1, Math.max(0, gain));
+    const now = this.ctx.currentTime;
+    if (seconds <= 0) this.fadeGain.gain.setValueAtTime(value, now);
+    else this.fadeGain.gain.setTargetAtTime(value, now, Math.max(0.01, seconds / 3));
+  }
+
+  get fade(): number {
+    return this.fadeGain.gain.value;
+  }
+
   /** Envía (o retira) el canal al bus de monitorización (cue de auriculares). */
   setCueSend(on: boolean): void {
     this.cueSendGain.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.02);
@@ -409,6 +605,81 @@ export class Deck {
 
   // ---------- Internals ----------
 
+  /** True si hay una pista programada para entrar sin silencio al final. */
+  get hasScheduledNext(): boolean {
+    return this.pendingNext !== null;
+  }
+
+  /**
+   * Gapless real: programa el siguiente AudioBufferSourceNode en el mismo
+   * deck con arranque sample-accurate justo al terminar la pista actual.
+   * Devuelve los segundos restantes, o null si no se pudo programar.
+   */
+  scheduleNext(buffer: AudioBuffer, onSwap: () => void): number | null {
+    if (!this._playing || !this.buffer || this.pendingNext || this._reversed || this._beatRepeat || this.loop) return null;
+    const remaining = Math.max(0, this._duration - this.position) / this.effectiveRate();
+    if (remaining <= 0.02) return null;
+    const startAt = this.ctx.currentTime + remaining;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = this.effectiveRate();
+    src.connect(this.eqLow);
+    const old = this.source;
+    if (old) {
+      old.onended = null; // evita que el handler de fin dispare la cola dos veces
+      try {
+        old.stop(startAt);
+      } catch {
+        /* ya parado */
+      }
+    }
+    src.start(startAt, 0);
+    const timer = window.setTimeout(() => {
+      this.pendingNext = null;
+      try {
+        old?.disconnect();
+      } catch {
+        /* ya desconectado */
+      }
+      this.buffer = buffer;
+      this._duration = buffer.duration;
+      this.startOffset = 0;
+      this.startCtxTime = startAt;
+      this.loop = null;
+      this.cuePoint = null;
+      this.source = src;
+      src.onended = () => {
+        src.disconnect();
+        if (this.source === src) this.source = null;
+        if (!this.stoppedIntents.has(src) && this._playing) {
+          this._playing = false;
+          this.startOffset = this._duration;
+          this.onEnded?.();
+        }
+      };
+      onSwap();
+    }, remaining * 1000);
+    this.pendingNext = { source: src, timer };
+    return remaining;
+  }
+
+  cancelScheduledNext(): void {
+    const pending = this.pendingNext;
+    if (!pending) return;
+    this.pendingNext = null;
+    window.clearTimeout(pending.timer);
+    try {
+      pending.source.stop();
+    } catch {
+      /* ya parado */
+    }
+    try {
+      pending.source.disconnect();
+    } catch {
+      /* ya desconectado */
+    }
+  }
+
   private spawnSource(offset: number): void {
     const buffer = this.buffer;
     if (!buffer) return;
@@ -446,4 +717,17 @@ export class Deck {
     }
     src.disconnect();
   }
+}
+
+
+/** Crea el buffer espejo (misma duración, audio al revés). */
+function reverseBuffer(ctx: BaseAudioContext, source: AudioBuffer): AudioBuffer {
+  const out = ctx.createBuffer(source.numberOfChannels, source.length, source.sampleRate);
+  for (let channel = 0; channel < source.numberOfChannels; channel += 1) {
+    const from = source.getChannelData(channel);
+    const to = out.getChannelData(channel);
+    const last = from.length - 1;
+    for (let i = 0; i <= last; i += 1) to[i] = from[last - i]!;
+  }
+  return out;
 }

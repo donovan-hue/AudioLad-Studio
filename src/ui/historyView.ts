@@ -1,5 +1,6 @@
 import type { HistoryEvent, RecordingMeta, TrackMeta } from '../library/library.js';
 import { formatBpm, formatTime } from '../util/format.js';
+import { icon } from './icons.js';
 
 export interface HistoryCallbacks {
   onClear(): void;
@@ -19,7 +20,7 @@ export class HistoryView {
     this.el.innerHTML = `
       <div class="panel-head">
         <span class="panel-hint">Sesiones, mezclas y conversiones recientes (persistidas).</span>
-        <button class="btn btn-mini history-clear" aria-label="Borrar el historial">🗑 Borrar historial</button>
+        <button class="btn btn-mini history-clear" aria-label="Borrar el historial">${icon('trash', 15)}<span>Borrar historial</span></button>
       </div>
       <ul class="history-list" aria-label="Historial"></ul>
       <div class="panel-empty history-empty" hidden>Sin actividad todavía: reproduce, graba o convierte.</div>
@@ -39,11 +40,11 @@ export class HistoryView {
       li.className = `history-item history-${event.type}`;
       if (event.type === 'played') {
         const track = this.tracks.find((t) => t.id === event.trackId);
-        li.innerHTML = `<span class="hi-icon">🎧</span><span class="hi-body">
+        li.innerHTML = `<span class="hi-icon">${icon('headphones', 16)}</span><span class="hi-body">
           <b>${track?.title ?? 'Pista eliminada'}</b> — Deck ${event.deck} · ${formatBpm(track?.bpm)} BPM · ${formatTime(event.seconds)} reproducidos
           <small>${new Date(event.at).toLocaleString()}</small></span>`;
       } else {
-        li.innerHTML = `<span class="hi-icon">⤓</span><span class="hi-body">
+        li.innerHTML = `<span class="hi-icon">${icon('link', 16)}</span><span class="hi-body">
           <b>Conversión</b> — ${event.title} → ${event.fileName}
           <small>${new Date(event.at).toLocaleString()} · ${event.url}</small></span>`;
       }

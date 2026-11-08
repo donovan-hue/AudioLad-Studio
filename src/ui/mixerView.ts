@@ -159,6 +159,12 @@ export class MixerView {
   }
 
   /** Sync de todos los faders desde el estado persistido, sin disparar eventos. */
+  /** Sincroniza solo el fader master (usado por la barra «Ahora suena»). */
+  setMaster(position: number): void {
+    const input = this.el.querySelector('.mk-master') as HTMLInputElement | null;
+    if (input) input.value = String(position);
+  }
+
   setFaders(state: {
     master: number;
     crossfader: number;

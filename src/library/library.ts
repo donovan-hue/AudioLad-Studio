@@ -16,6 +16,8 @@ export interface TrackMeta {
   album: string;
   bpm: number | null;
   bpmSource: 'tag' | 'estimated' | 'manual';
+  /** Sonoridad integrada estimada (LUFS, K-weighting). */
+  loudnessLufs?: number | null;
   durationSec: number;
   sizeBytes: number;
   /** Absolute peak per waveform bucket, values 0..1. */
@@ -48,6 +50,12 @@ export interface TrackMeta {
   analysisError?: string;
   /** Etiquetas libres del usuario (bases para búsquedas y smart playlists). */
   tags?: string[];
+  /** Carpeta relativa cuando se importa con File System Access / webkitdirectory. */
+  folder?: string;
+  /** Letras en formato LRC o texto plano. */
+  lyrics?: string;
+  /** Huella acústica local de 256 bits (duplicados difusos). */
+  fingerprint?: string;
 }
 
 export interface Playlist {
@@ -72,6 +80,11 @@ export interface RecordingMeta {
   trackIds: string[];
 }
 
+export interface TrashEntry {
+  track: TrackMeta;
+  deletedAt: string;
+}
+
 export interface LibraryData {
   tracks: TrackMeta[];
   playlists: Playlist[];
@@ -81,6 +94,8 @@ export interface LibraryData {
   queue: string[];
   history: { events: HistoryEvent[] };
   recordings: RecordingMeta[];
+  /** Papelera: pistas eliminadas con sus bytes aún en el almacén. */
+  trash: TrashEntry[];
 }
 
 const LIBRARY_KEY = 'library.v1';
@@ -96,7 +111,15 @@ export function newId(): string {
  * quitar una pista quita sus bytes, hot cues y referencias.
  */
 export class Library {
-  private data: LibraryData = { tracks: [], playlists: [], smartPlaylists: [], queue: [], history: { events: [] }, recordings: [] };
+  private data: LibraryData = {
+    tracks: [],
+    playlists: [],
+    smartPlaylists: [],
+    queue: [],
+    history: { events: [] },
+    recordings: [],
+    trash: [],
+  };
 
   constructor(private readonly store: TrackStore) {}
 
@@ -117,6 +140,7 @@ export class Library {
         queue: Array.isArray(saved.queue) ? saved.queue : [],
         history: saved.history && Array.isArray(saved.history.events) ? saved.history : { events: [] },
         recordings: Array.isArray(saved.recordings) ? saved.recordings : [],
+        trash: Array.isArray(saved.trash) ? saved.trash : [],
       };
     }
   }
@@ -191,7 +215,7 @@ export class Library {
   }
 
   /** Actualiza metadatos editables (título, artista, álbum, género, fecha, nº). */
-  async updateMetadata(id: string, patch: Partial<Pick<TrackMeta, 'title' | 'artist' | 'album' | 'genre' | 'date' | 'trackNumber' | 'tags'>>): Promise<TrackMeta | null> {
+  async updateMetadata(id: string, patch: Partial<Pick<TrackMeta, 'title' | 'artist' | 'album' | 'genre' | 'date' | 'trackNumber' | 'tags' | 'lyrics' | 'artwork'>>): Promise<TrackMeta | null> {
     const track = this.getTrack(id);
     if (!track) return null;
     Object.assign(track, patch);
@@ -218,7 +242,7 @@ export class Library {
   /** Guarda el resultado de (re)analizar: picos, BPM y tonalidad reales. */
   async setTrackAnalysisData(
     id: string,
-    data: Partial<Pick<TrackMeta, 'peaks' | 'bpm' | 'bpmSource' | 'key' | 'durationSec'>>,
+    data: Partial<Pick<TrackMeta, 'peaks' | 'bpm' | 'bpmSource' | 'key' | 'durationSec' | 'loudnessLufs' | 'fingerprint'>>,
   ): Promise<void> {
     const track = this.getTrack(id);
     if (!track) return;
@@ -274,12 +298,45 @@ export class Library {
   }
 
   async removeTrack(id: string): Promise<void> {
+    const track = this.getTrack(id);
+    if (track) this.data.trash = [...this.data.trash.filter((entry) => entry.track.id !== id), { track, deletedAt: new Date().toISOString() }];
     this.data.tracks = this.data.tracks.filter((t) => t.id !== id);
     for (const playlist of this.data.playlists) {
       playlist.trackIds = playlist.trackIds.filter((tid) => tid !== id);
     }
     this.data.queue = this.data.queue.filter((tid) => tid !== id);
-    await this.store.deleteBytes(id);
+    await this.persist();
+  }
+
+  get trash(): readonly TrashEntry[] {
+    return this.data.trash;
+  }
+
+  /** Restaura una pista desde la papelera conservando sus bytes. */
+  async restoreFromTrash(trackId: string): Promise<boolean> {
+    const entry = this.data.trash.find((item) => item.track.id === trackId);
+    if (!entry) return false;
+    this.data.trash = this.data.trash.filter((item) => item.track.id !== trackId);
+    if (!this.getTrack(trackId)) this.data.tracks.push(entry.track);
+    await this.persist();
+    return true;
+  }
+
+  /** Vacía la papelera y borra definitivamente los bytes. */
+  async emptyTrash(): Promise<number> {
+    const entries = this.data.trash;
+    for (const entry of entries) await this.store.deleteBytes(entry.track.id);
+    this.data.trash = [];
+    await this.persist();
+    return entries.length;
+  }
+
+  /** Restaura una pista eliminada con sus bytes (deshacer de la papelera). */
+  async restoreTrack(track: TrackMeta, bytes: Uint8Array | null): Promise<void> {
+    if (this.getTrack(track.id)) return;
+    if (bytes) await this.store.putBytes(track.id, bytes);
+    this.data.trash = this.data.trash.filter((entry) => entry.track.id !== track.id);
+    this.data.tracks.push(track);
     await this.persist();
   }
 
@@ -347,6 +404,24 @@ export class Library {
     this.data.queue = [...this.data.queue, trackId];
     await this.persist();
     return true;
+  }
+
+  /** Inserta una pista al principio de la cola (o la mueve si ya estaba). */
+  async enqueueNext(trackId: string): Promise<boolean> {
+    if (!this.getTrack(trackId)) return false;
+    this.data.queue = [trackId, ...this.data.queue.filter((id) => id !== trackId)];
+    await this.persist();
+    return true;
+  }
+
+  /** Añade varias pistas a la cola respetando el orden y sin duplicados. */
+  async enqueueMany(trackIds: readonly string[]): Promise<void> {
+    const next = [...this.data.queue];
+    for (const id of trackIds) {
+      if (this.getTrack(id) && !next.includes(id)) next.push(id);
+    }
+    this.data.queue = next;
+    await this.persist();
   }
 
   async dequeue(trackId: string): Promise<string | null> {
@@ -436,6 +511,28 @@ export class Library {
    * Move a track inside a playlist by -1 (up) or +1 (down). The playlist order
    * is real, explicit and persisted.
    */
+  async setPlaylistCover(playlistId: string, coverUrl: string | null): Promise<void> {
+    const playlist = this.data.playlists.find((p) => p.id === playlistId);
+    if (!playlist) return;
+    playlist.coverUrl = coverUrl || undefined;
+    await this.persist();
+  }
+
+  /** Reordena una playlist moviendo `fromId` justo antes de `toId`. */
+  async reorderPlaylist(playlistId: string, fromId: string, toId: string): Promise<boolean> {
+    const playlist = this.data.playlists.find((p) => p.id === playlistId);
+    if (!playlist) return false;
+    const from = playlist.trackIds.indexOf(fromId);
+    const to = playlist.trackIds.indexOf(toId);
+    if (from < 0 || to < 0 || from === to) return false;
+    const next = [...playlist.trackIds];
+    const [moved] = next.splice(from, 1);
+    if (moved) next.splice(to, 0, moved);
+    playlist.trackIds = next;
+    await this.persist();
+    return true;
+  }
+
   async moveInPlaylist(playlistId: string, trackId: string, delta: -1 | 1): Promise<boolean> {
     const playlist = this.getPlaylist(playlistId);
     if (!playlist) return false;
